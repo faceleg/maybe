@@ -1,5 +1,7 @@
 const R = require('ramda');
 const prop = R.prop;
+const path = R.path;
+const curry = R.curry;
 
 const user = {
   email: 'james@example.com',
@@ -49,14 +51,56 @@ export class Maybe<A> {
     }
     return Maybe.of(f(this.__value));
   }
+
+  join<A>() {
+    return this.__value;
+  }
+
+  chain<B>(f: (a: A) => B): B {
+    return this.map(f).join();
+  }
+
+  orElse<B>(something: B): Maybe<A | B> {
+    if (this.isNothing()) {
+      return Maybe.of(something);
+    }
+
+    return this;
+  }
+
+  ap(maybe) {
+    return maybe.map(this.__value);
+  }
 }
 
-function getUserBanner(banners, user) {
+const liftA2 = curry(function(fn: (a: any) => any, m1: Maybe<any>, m2: Maybe<any>) {
+  return m1.map(fn).ap(m2);
+});
+
+function getProvinceBanner(province) {
+  return Maybe.of(banners[province]);
+}
+
+function getUserBanner(user) {
   return Maybe.of(user)
-  .map(prop('accountDetails'))
-  .map(prop('address'))
-  .map(prop('province'))
-  .map(prop(R.__, banners));
+  .map(path([
+    'accountDetails',
+    'address',
+    'province'
+  ]))
+  .chain(getProvinceBanner);
 }
 
-console.log(getUserBanner(banners, user));
+const bannerSrc = getUserBanner(user).orElse('something else');
+console.log('bannerSrc:', bannerSrc);
+
+const applyBanner = curry(function(el, banner) {
+  el.src = banner;
+  return el;
+});
+
+const applyBannerMaybe = liftA2(applyBanner);
+
+const mutatedBanner = applyBannerMaybe(Maybe.of({ src: null }), bannerSrc);
+
+console.log(mutatedBanner);

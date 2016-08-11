@@ -1,7 +1,9 @@
 "use strict";
-const R = require('ramda');
-const prop = R.prop;
-const user = {
+var R = require('ramda');
+var prop = R.prop;
+var path = R.path;
+var curry = R.curry;
+var user = {
     email: 'james@example.com',
     accountDetails: {
         address: {
@@ -13,7 +15,7 @@ const user = {
     },
     preferences: {}
 };
-const banners = {
+var banners = {
     'AB': '/assets/banners/alberta.jpg',
     'BC': '/assets/banners/british-columbia.jpg',
     'MB': '/assets/banners/manitoba.jpg',
@@ -24,32 +26,63 @@ const banners = {
     'PE': '/assets/banners/prince-edward.jpg',
     'QC': '/assets/banners/quebec.jpg',
     'SK': '/assets/banners/saskatchewan.jpg',
-    'YT': '/assets/banners/yukon.jpg',
+    'YT': '/assets/banners/yukon.jpg'
 };
-class Maybe {
-    constructor(value) {
+var Maybe = (function () {
+    function Maybe(value) {
         this.__value = value;
     }
-    static of(value) {
+    Maybe.of = function (value) {
         return new Maybe(value);
-    }
-    isNothing() {
+    };
+    Maybe.prototype.isNothing = function () {
         return (this.__value === null || this.__value === undefined);
-    }
-    map(f) {
+    };
+    Maybe.prototype.map = function (f) {
         if (this.isNothing()) {
             return Maybe.of(null);
         }
         return Maybe.of(f(this.__value));
-    }
-}
+    };
+    Maybe.prototype.join = function () {
+        return this.__value;
+    };
+    Maybe.prototype.chain = function (f) {
+        return this.map(f).join();
+    };
+    Maybe.prototype.orElse = function (something) {
+        if (this.isNothing()) {
+            return Maybe.of(something);
+        }
+        return this;
+    };
+    Maybe.prototype.ap = function (maybe) {
+        return maybe.map(this.__value);
+    };
+    return Maybe;
+}());
 exports.Maybe = Maybe;
-function getUserBanner(banners, user) {
-    return Maybe.of(user)
-        .map(prop('accountDetails'))
-        .map(prop('address'))
-        .map(prop('province'))
-        .map(prop(R.__, banners));
+var liftA2 = curry(function (fn, m1, m2) {
+    return m1.map(fn).ap(m2);
+});
+function getProvinceBanner(province) {
+    return Maybe.of(banners[province]);
 }
-console.log(getUserBanner(banners, user));
-//# sourceMappingURL=index.js.map
+function getUserBanner(user) {
+    return Maybe.of(user)
+        .map(path([
+        'accountDetails',
+        'address',
+        'province'
+    ]))
+        .chain(getProvinceBanner);
+}
+var bannerSrc = getUserBanner(user).orElse('something else');
+console.log('bannerSrc:', bannerSrc);
+var applyBanner = curry(function (el, banner) {
+    el.src = banner;
+    return el;
+});
+var applyBannerMaybe = liftA2(applyBanner);
+var mutatedBanner = applyBannerMaybe(Maybe.of({ src: null }), bannerSrc);
+console.log(mutatedBanner);
